@@ -6,14 +6,14 @@ As we all know, training LoFTR is not easy, I mean the official dont offer too m
 
 This repo finishs the following things:
 
--[x] Using Colmap for sparse reconstruction.
+- [x] Using Colmap for sparse reconstruction.
 
--[x] Using Depth-Anything evaluating Depth for each image.
+- [x] Using Depth-Anything evaluating Depth for each image.
 
--[x] Convert depth.png to depth.h5 file.
+- [x] Convert depth.png to depth.h5 file.
 
--[x] Convert camera params to .npz file.
+- [x] Convert camera params to .npz file.
 
--[x] Automatically Generating train data struction.
+- [x] Automatically Generating train data struction.
 
--[x] Modify a little code because of the errors in the initial LoFTR.
+- [x] Modify a little code because of the errors in the initial LoFTR.
