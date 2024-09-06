@@ -199,3 +199,5 @@ cfg.TRAINER.N_SAMPLES_PER_SUBSET = 100
 
 cfg.DATASET.MGDPT_IMG_RESIZE = 640  # for training on 11GB mem GPUs
 ```
+
+Then you could train your own LoFTR model happily!😊
