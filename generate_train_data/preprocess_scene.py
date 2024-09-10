@@ -1,12 +1,6 @@
-# -*- coding: utf-8 -*-
-#        Data: 2024-09-06 12:08
-#     Project: LoFTR
-#   File Name: depth_evaluate.py
-#      Author: KangPeilun
-#       Email: 374774222@qq.com
-# Description: 3.将数据转换成MegaDepth数据集格式
-
 import argparse
+import math
+
 import numpy as np
 import os
 from tqdm import tqdm
@@ -17,15 +11,11 @@ parser = argparse.ArgumentParser(description='MegaDepth preprocessing script')
 
 parser.add_argument(
     '--base_path', type=str, required=True,
-    help='path to MegaDepth'
+    help='path to MegaDepth, input and output directory'
 )
 parser.add_argument(
-    '--scene_id', type=str, required=True,
-    help='scene ID'
-)
-parser.add_argument(
-    '--output_path', type=str, required=True,
-    help='path to the output directory'
+    '--scene_name', type=str, required=True,
+    help='your data name = scene name'
 )
 
 
@@ -35,7 +25,7 @@ base_path = args.base_path
 # Remove the trailing / if need be.
 if base_path[-1] in ['/', '\\']:
     base_path = base_path[: - 1]
-scene_id = args.scene_id
+scene_name = args.scene_name
 
 
 undistorted_sparse_path = os.path.join(  # sfm文件夹
@@ -45,7 +35,7 @@ if not os.path.exists(undistorted_sparse_path):
     exit()
 
 depths_path = os.path.join(
-    base_path, "depth"
+    base_path, "depths"
 )
 if not os.path.exists(depths_path):
     exit()
@@ -112,13 +102,13 @@ depth_paths = []
 for image_name in tqdm(image_names, total=len(image_names), desc="Image and depthmaps paths"):
     image_path = os.path.join(images_path, image_name)
    
-    # Path to the depth file
+    # Path to the depths file
     depth_path = os.path.join(
         depths_path, '%s.h5' % os.path.splitext(image_name)[0]
     )
     
     if os.path.exists(depth_path):
-        # Check if depth map or background / foreground mask
+        # Check if depths map or background / foreground mask
         file_size = os.stat(depth_path).st_size
         # Rough estimate - 75KB might work as well
         if file_size < 100 * 1024:
@@ -241,11 +231,12 @@ for idx1 in tqdm(range(n_images), total=n_images, desc="Compute overlap score"):
 
 
 # train val test split
-# 按照6:2:2的比率划分数据集
+# 按照8:1:1的比率划分数据集
+split_ratio = [8, 1, 1]  # train val test  根据你的需要修改你的比例，0表示不划分该数据集
 random.seed(2024)  # 保证每次划分的结果一样
 image_ids = list(range(n_images))  # 一共有多少个数据，每个数据都有一个id
-train_sample = random.sample(image_ids, int(n_images * 0.8))  # 采样训练集
-val_sample = random.sample(list(set(image_ids) - set(train_sample)), int(n_images * 0.1))  # 采样验证集
+train_sample = random.sample(image_ids, math.ceil(n_images * split_ratio[0]/sum(split_ratio)))  # 采样训练集
+val_sample = random.sample(list(set(image_ids) - set(train_sample)), math.floor(n_images * split_ratio[1]/sum(split_ratio)))  # 采样验证集
 test_sample = list(set(image_ids) - set(train_sample) - set(val_sample))  # 采样测试集
 
 train_mask = np.array([True if id in train_sample else False for id in image_ids])  # 获取train val test的mask，方便后面选点
@@ -275,7 +266,7 @@ train_poses = np.array(poses.copy(), dtype=np.object)
 train_poses[~train_mask] = None
 
 np.savez(
-    os.path.join(args.output_path, '%s_train.npz' % scene_id),
+    os.path.join(args.base_path, '%s_train.npz' % scene_name),
     image_paths=train_image_paths,
     depth_paths=train_depth_paths,
     intrinsics=train_intrinsics,
@@ -310,7 +301,7 @@ val_poses = np.array(poses.copy(), dtype=np.object)
 val_poses[~val_mask] = None
 
 np.savez(
-    os.path.join(args.output_path, '%s_val.npz' % scene_id),
+    os.path.join(args.base_path, '%s_val.npz' % scene_name),
     image_paths=val_image_paths,
     depth_paths=val_depth_paths,
     intrinsics=val_intrinsics,
@@ -339,7 +330,7 @@ test_poses = np.array(poses.copy(), dtype=np.object)
 test_poses[~test_mask] = None
 
 np.savez(
-    os.path.join(args.output_path, '%s_test.npz' % scene_id),
+    os.path.join(args.base_path, '%s_test.npz' % scene_name),
     image_paths=test_image_paths,
     depth_paths=test_depth_paths,
     intrinsics=test_intrinsics,
@@ -350,28 +341,67 @@ np.savez(
 # copy images and depths
 # train
 os.makedirs(os.path.join(base_path, "train/images"), exist_ok=True)
-os.makedirs(os.path.join(base_path, "train/depth"), exist_ok=True)
+os.makedirs(os.path.join(base_path, "train/depths"), exist_ok=True)
 for image_path, depth_path in tqdm(zip(train_image_paths, train_depth_paths), total=len(train_image_paths),
                                    desc="Copy train images"):
     if image_path == None: continue
     shutil.copy(os.path.join(base_path, image_path), os.path.join(base_path, "train/images"))
-    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "train/depth"))
+    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "train/depths"))
 
 # val
 os.makedirs(os.path.join(base_path, "val/images"), exist_ok=True)
-os.makedirs(os.path.join(base_path, "val/depth"), exist_ok=True)
-for image_path, depth_path in tqdm(zip(val_image_paths, val_depth_paths), total=len(train_image_paths),
+os.makedirs(os.path.join(base_path, "val/depths"), exist_ok=True)
+for image_path, depth_path in tqdm(zip(val_image_paths, val_depth_paths), total=len(val_image_paths),
                                    desc="Copy val images"):
     if image_path == None: continue
     shutil.copy(os.path.join(base_path, image_path), os.path.join(base_path, "val/images"))
-    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "val/depth"))
+    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "val/depths"))
 
 # test
 os.makedirs(os.path.join(base_path, "test/images"), exist_ok=True)
-os.makedirs(os.path.join(base_path, "test/depth"), exist_ok=True)
-for image_path, depth_path in tqdm(zip(test_image_paths, test_depth_paths), total=len(train_image_paths),
+os.makedirs(os.path.join(base_path, "test/depths"), exist_ok=True)
+for image_path, depth_path in tqdm(zip(test_image_paths, test_depth_paths), total=len(test_image_paths),
                                    desc="Copy test images"):
     if image_path == None: continue
     shutil.copy(os.path.join(base_path, image_path), os.path.join(base_path, "test/images"))
-    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "test/depth"))
+    shutil.copy(os.path.join(base_path, depth_path), os.path.join(base_path, "test/depths"))
+
+
+## 将生成的数据组织成MegaDepth数据格式
+scene_info_dir = os.path.join(args.base_path, scene_name, "index/scene_info")
+trainvaltest_list_dir = os.path.join(args.base_path, scene_name, "index/trainvaltest_list")
+os.makedirs(scene_info_dir, exist_ok=True)
+os.makedirs(trainvaltest_list_dir, exist_ok=True)
+
+# 生成 train val test 数据集名称
+with open(os.path.join(trainvaltest_list_dir, "train_list.txt"), 'w') as f:
+    f.write(f"{scene_name}_train")
+with open(os.path.join(trainvaltest_list_dir, "val_list.txt"), 'w') as f:
+    f.write(f"{scene_name}_val")
+with open(os.path.join(trainvaltest_list_dir, "test_list.txt"), 'w') as f:
+    f.write(f"{scene_name}_test")
+
+# 将.npz文件移动到 scene_info 文件夹中
+shutil.move(os.path.join(args.base_path, f"{scene_name}_train.npz"), scene_info_dir)
+shutil.move(os.path.join(args.base_path, f"{scene_name}_val.npz"), scene_info_dir)
+shutil.move(os.path.join(args.base_path, f"{scene_name}_test.npz"), scene_info_dir)
+
+# 将 train val test 文件夹移动到 {scene_name} 文件夹中
+shutil.move(os.path.join(args.base_path, "train"), os.path.join(args.base_path, scene_name))
+shutil.move(os.path.join(args.base_path, "val"), os.path.join(args.base_path, scene_name))
+shutil.move(os.path.join(args.base_path, "test"), os.path.join(args.base_path, scene_name))
+
+
+def rm_dir(dir_path):
+    if os.path.exists(dir_path):
+        if os.path.isfile(dir_path):
+            os.remove(dir_path)
+        else:
+            shutil.rmtree(dir_path)
+
+# 删除冗余的文件夹
+rm_dir(os.path.join(args.base_path, "stereo"))
+rm_dir(os.path.join(args.base_path, "distorted"))
+rm_dir(os.path.join(args.base_path, "run-colmap-geometric.sh"))
+rm_dir(os.path.join(args.base_path, "run-colmap-photometric.sh"))
 

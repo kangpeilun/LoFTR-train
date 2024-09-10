@@ -90,12 +90,12 @@ class MegaDepthDataset(Dataset):
             depth0 = depth1 = torch.tensor([])
 
         # read intrinsics of original size
-        K_0 = torch.tensor(self.scene_info['intrinsics'][idx0].copy(), dtype=torch.float).reshape(3, 3)
-        K_1 = torch.tensor(self.scene_info['intrinsics'][idx1].copy(), dtype=torch.float).reshape(3, 3)
+        K_0 = torch.tensor(self.scene_info['intrinsics'][idx0].copy().astype(float), dtype=torch.float).reshape(3, 3)
+        K_1 = torch.tensor(self.scene_info['intrinsics'][idx1].copy().astype(float), dtype=torch.float).reshape(3, 3)
 
         # read and compute relative poses
-        T0 = self.scene_info['poses'][idx0]
-        T1 = self.scene_info['poses'][idx1]
+        T0 = self.scene_info['poses'][idx0].astype(float)
+        T1 = self.scene_info['poses'][idx1].astype(float)
         T_0to1 = torch.tensor(np.matmul(T1, np.linalg.inv(T0)), dtype=torch.float)[:4, :4]  # (4, 4)
         T_1to0 = T_0to1.inverse()
 

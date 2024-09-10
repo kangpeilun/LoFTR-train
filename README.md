@@ -4,15 +4,19 @@ This is the initial LoFTR [README](docs/README.md) file.
 
 As we all know, training LoFTR is not easy, I mean the official dont offer too much info for training our own custom datasets, so I give it a try.
 
+![](assets/loftr-github-demo.gif)
+
 This repo finishs the following things:
 
 - [x] Using Colmap for sparse reconstruction.
 
-- [x] Using Depth-Anything evaluating Depth for each image.
+- [x] Using Colmap for dense reconstruction and generate depth map.
 
-- [x] Convert depth.png to depth.h5 file.
+- [x] Convert depth.bin to depth.h5 file.
 
 - [x] Convert camera params to .npz file.
+
+- [x] Automatically Generate train data structure as MegaDepth format.
 
 - [x] Modify a little code because of the errors in the initial LoFTR.
 
@@ -28,7 +32,7 @@ pip install -r requirements_loftr.txt
 
 
 # Prepare your own data
-## 1.Using Colmap for sparse reconstruction
+## 1.Using Colmap for sparse reconstruction and dense reconstruction
 First of all, you should install [Colmap](https://github.com/colmap/colmap) (best cuda version).
 
 If you have your own COLMAP dataset without undistortion (e.g., using OPENCV camera), you can try to just run the last part of the script: 
@@ -39,140 +43,210 @@ Put the images in input and the COLMAP info in a subdirectory distorted:
 |   |---<image 0>
 |   |---<image 1>
 |   |---...
+```
+Then run
+```python
+python generate_train_data/colmap_convert.py -s <location> [--skip_matching] [--resize] #If not resizing, ImageMagick is not needed
+ 
+# the input dir is in the <location>
+```
+After running the command, you will get the sparse reconstruction and the depth maps.
+
+```
+<location>
+|---input
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
+|---images
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
 |---distorted
     |---database.db
     |---sparse
         |---0
             |---...
+|---sparse
+|   |---0
+        |---cameras.bin
+        |---images.bin
+        |---points3D.bin
+        |---cameras.txt
+        |---images.txt
+        |---points3D.txt
+    |---cameras.bin
+    |---images.bin
+    |---points3D.bin
+|---stereo
+    |---depth_maps
+        |---image_0.photometric.bin
+        |---image_1.photometric.bin
+        |---...
+    |---normal_maps
+        |---image_0.photometric.bin
+        |---image_1.photometric.bin
+        |---...
 ```
-Then run
+
+
+## 2.Converting depth.bin to depth.h5 file
+Then run the following command to convert the depth.bin to depth.h5 file:
 ```python
-python convert.py -s <location> [--skip_matching] [--resize] #If not resizing, ImageMagick is not needed
- 
-# the input dir is in the <location>
+python generate_train_data/read_depth.py \
+    --depth_map_dir YOUR_COLMAP_DEPTH_MAP_DIR \
+    --normal_map_dir YOUR_COLMAP_NORMAL_MAP_DIR \
+    --output_dir YOUR_OUTPUT_h5_DEPTH_DIR
 ```
 
-## 2.Using Depth-Anything evaluating Depth for each image
-1. Clone [Depth-Anything](https://github.com/LiheYoung/Depth-Anything) and download pre-trained model [here](https://huggingface.co/spaces/LiheYoung/Depth-Anything/tree/main/checkpoints).
-```python
-git clone --recursive https://github.com/LiheYoung/Depth-Anything.git
-```
-2. Modify `run.py` and replace your model path
-```python
-    model_configs = {
-        'vitl': {'encoder': 'vitl', 'features': 256, 'out_channels': [256, 512, 1024, 1024]},
-        'vitb': {'encoder': 'vitb', 'features': 128, 'out_channels': [96, 192, 384, 768]},
-        'vits': {'encoder': 'vits', 'features': 64, 'out_channels': [48, 96, 192, 384]}
-    }
-    depth_anything = DepthAnything(model_configs[args.encoder]).to(DEVICE).eval()
-    depth_anything.load_state_dict(torch.load(f'model_weights/depth_anything_{args.encoder}14.pth'))  # replace your model path
-```
-![img.png](assets/img.png)
-
-3. Predict Depth map for each image
-```python
-python run.py --encoder vitl --img-path assets/examples --outdir depth_vis --grayscale --pred-only
-# python run.py --encoder vitb --img-path assets/examples --outdir depth_vis --grayscale --pred-only
-# python run.py --encoder vits --img-path assets/examples --outdir depth_vis --grayscale --pred-only
-```
-Then you will get the following results
-![img_1.png](assets/img_1.png)
-
-## 3.Convert depth.png to depth.h5 file
-run `generate_train_data/convert_depth_format.py`
-```python
-python generate_train_data/convert_depth_format.py --image_dir YOUR_IMAGE_DIR_PATH --output_dir YOUR_OUTPUT_DIR_PATH
-
-# dest = f.create_dataset("depth", data=depth, compression='gzip', compression_opts=9)  # small file but slow
-# dest = f.create_dataset("depth", data=depth)  # big file but fast
-```
-Because I use gzip compression for h5 file, It may spend lots of time.
-
-Then you will get
-
-![img_2.png](assets/img_2.png)
-
-## 4.Convert camera params to .npz file
-After the above three steps you can get the following data structure:
-
-First of all, you should convert `cameras.bin images.bin points3D.bin` to `cameras.txt images.txt points3D.txt` by Colmap.
-
-![img_8.png](assets/img_8.png)
+Then you will get the following data dir:
 
 ```
-<scene>
+<location>
+|---input
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
 |---images
 |   |---<image 0>
 |   |---<image 1>
 |   |---...
-|---sparse
-|    |---0
-|       |---cameras.bin
-|       |---images.bin
-|       |---points3D.bin
-|---depth
-|   |---image0.h5
-|   |---image1.h5
+|---depths
+|   |---<image 0>.h5
+|   |---<image 1>.h5
 |   |---...
+|---depth_image
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
+|---distorted
+    |---database.db
+    |---sparse
+        |---0
+            |---...
+|---sparse
+|   |---0
+        |---cameras.bin
+        |---images.bin
+        |---points3D.bin
+        |---cameras.txt
+        |---images.txt
+        |---points3D.txt
+    |---cameras.bin
+    |---images.bin
+    |---points3D.bin
+|---stereo
+    |---depth_maps
+        |---image_0.photometric.bin
+        |---image_1.photometric.bin
+        |---...
+    |---normal_maps
+        |---image_0.photometric.bin
+        |---image_1.photometric.bin
+        |---...
 ```
-as the image showing:
 
-![img_3.png](assets/img_3.png)
+depths dir contain the following files:
 
-run `generate_train_data/preprocess_scene.py`
+![img_depth.png](assets/img_depth.png)
+
+depth_image dir contain the following files:
+
+![img_depth_image.png](assets/img_depth_image.png)
+
+
+## 3.Automatically generate the train data as MegaDepth format
+
+Then run the following command to generate train data:
+
 ```python
-python generate_train_data/preprocess_scene.py --base_path YOUR_<scene>_PATH --scene_id YOUR_<scene>_NAME --output_path YOUR_OUTPUT_PATH
+python generate_train_data/preprocess_scene.py --base_path YOUR_BASE_PATH --scene_name YOUR_SCENE_NAME
 ```
 
-Then you will get
-
-![img_4.png](assets/img_4.png)
-
-## 5.Format data structure
-you should copy the generated data file to the `LoFTR/data`, and format data structure, as the following shows:
-![img_5.png](assets/img_5.png)
-
-![img_6.png](assets/img_6.png)
-
-![img_7.png](assets/img_7.png)
-
-Manually specify the `train, val, test` set in `train_list.txt val_list.txt test_list.txt` file.
-
-This data structure is exactly the same as MegaDepth.
+Then you will get the following data dir:
 
 ```
-<scene>
-|---index
-|   |---scene_info
-|       |---xxx1.npz
-|       |---xxx2.npz
-|       |---xxx3.npz
-|   |---trainvaltest_list
-|       |---train_list.txt
-|       |---val_list.txt
-|       |---test_list.txt
-|---test
-|    |---depth
-|       |---image0.h5
-|       |---image1.h5
-|       |---...
-|   |---images
-|       |---image0.png
-|       |---image1.png
-|       |---...
-|---train
-|    |---depth
-|       |---image0.h5
-|       |---image1.h5
-|       |---...
-|   |---images
-|       |---image0.png
-|       |---image1.png
-|       |---...
+<location>
+|---input
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
+|---images
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
+|---depths
+|   |---<image 0>.h5
+|   |---<image 1>.h5
+|   |---...
+|---depth_image
+|   |---<image 0>
+|   |---<image 1>
+|   |---...
+|---sparse
+|   |---0
+        |---cameras.bin
+        |---images.bin
+        |---points3D.bin
+        |---cameras.txt
+        |---images.txt
+        |---points3D.txt
+    |---cameras.bin
+    |---images.bin
+    |---points3D.bin
+|---<scene_name>
+|   |---index
+|       |---scene_info
+|           |---<scenen_name>_train.npz
+|           |---<scenen_name>_val.npz
+|           |---<scenen_name>_test.npz
+|       |---trainvaltest_list
+|           |---train_list.txt
+|           |---val_list.txt
+|           |---test_list.txt
+|   |---test
+|       |---depths
+|           |---image0.h5
+|           |---image1.h5
+|           |---...
+|       |---images
+|           |---image0.png
+|           |---image1.png
+|           |---...
+|   |---train
+|       |---depths
+|           |---image0.h5
+|           |---image1.h5
+|           |---...
+|       |---images
+|           |---image0.png
+|           |---image1.png
+|           |---...
+|   |---val
+|       |---depths
+|           |---image0.h5
+|           |---image1.h5
+|           |---...
+|       |---images
+|           |---image0.png
+|           |---image1.png
+|           |---...
 ```
 
-# 6.Modify Config file
-Using the template creating your data config file.
+If you want to combine the val and test data, you should move the `val/depths/* and val/images/*` to `test/depths* and test/images` respectively.
+
+And `just` modify the `index/trainvaltest_list/test_list.txt`, as the following shows:
+
+test_list.txt
+```
+<scene_name>_test
+<scene_name>_val
+```
+
+Finally move the `<scene_name>` dir to `LoFTR_Project/data`
+
+# 4.Modify Config file
+Using the template creating your data config file. And copy the config to the `LoFTR_Project/configs/data` dir.
 
 change `YOUR_DATA_SCENE`
 
@@ -190,7 +264,7 @@ TEST_BASE_PATH = "data/YOUR_DATA_SCENE/index"
 cfg.DATASET.TEST_DATA_SOURCE = "MegaDepth"
 cfg.DATASET.VAL_DATA_ROOT = cfg.DATASET.TEST_DATA_ROOT = "data/YOUR_DATA_SCENE/test"
 cfg.DATASET.VAL_NPZ_ROOT = cfg.DATASET.TEST_NPZ_ROOT = f"{TEST_BASE_PATH}/scene_info"
-cfg.DATASET.VAL_LIST_PATH = cfg.DATASET.TEST_LIST_PATH = f"{TEST_BASE_PATH}/trainvaltest_list/val_list.txt"
+cfg.DATASET.VAL_LIST_PATH = cfg.DATASET.TEST_LIST_PATH = f"{TEST_BASE_PATH}/trainvaltest_list/test_list.txt"
 cfg.DATASET.MIN_OVERLAP_SCORE_TEST = 0.0   # for both test and val
 
 # 368 scenes in total for MegaDepth
@@ -199,5 +273,23 @@ cfg.TRAINER.N_SAMPLES_PER_SUBSET = 100
 
 cfg.DATASET.MGDPT_IMG_RESIZE = 640  # for training on 11GB mem GPUs
 ```
+
+# 5.Total Command
+```python
+# 1. first step
+python generate_train_data/colmap_convert.py -s <location> 
+
+# 2. second step
+python generate_train_data/read_depth.py \
+    --depth_map_dir <location>/stereo/depth_maps \
+    --normal_map_dir <location>/stereo/normal_maps \
+    --output_dir <location>
+
+# 3. third step
+python generate_train_data/preprocess_scene.py --base_path <location> --scene_name <scene_name>
+
+# change <location> and <scene_name> for your data
+```
+
 
 Then you could train your own LoFTR model happily!😊

@@ -1,11 +1,3 @@
-# -*- coding: utf-8 -*-
-#        Data: 2024-09-06 12:08
-#     Project: LoFTR
-#   File Name: depth_evaluate.py
-#      Author: KangPeilun
-#       Email: 374774222@qq.com
-# Description: 1.使用colmap估计相机内外参数，并生成稀疏点云
-
 #
 # Copyright (C) 2023, Inria
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
@@ -78,7 +70,7 @@ if not args.skip_matching:
 img_undist_cmd = (colmap_command + " image_undistorter \
     --image_path " + args.source_path + "/input \
     --input_path " + args.source_path + "/distorted/sparse/0 \
-    --output_path " + args.source_path + "\
+    --output_path " + args.source_path + " \
     --output_type COLMAP")
 exit_code = os.system(img_undist_cmd)
 if exit_code != 0:
@@ -87,13 +79,27 @@ if exit_code != 0:
 
 files = os.listdir(args.source_path + "/sparse")
 os.makedirs(args.source_path + "/sparse/0", exist_ok=True)
-# Copy each file from the source directory to the destination directory
+# Copy each file from the source directory to the destination directory 将每个文件从源目录复制到目标目录
 for file in files:
     if file == '0':
         continue
     source_file = os.path.join(args.source_path, "sparse", file)
     destination_file = os.path.join(args.source_path, "sparse", "0", file)
-    shutil.move(source_file, destination_file)
+    # shutil.move(source_file, destination_file)  # 复制一份保持文件结构不变，同时又符合GS的数据格式
+    shutil.copy(source_file, destination_file)
+
+
+### Convert .bin to .txt
+txt_convert_cmd = colmap_command + " model_converter \
+    --input_path " + args.source_path + "/sparse/0 \
+    --output_path " + args.source_path + "/sparse/0 \
+    --output_type TXT"
+
+exit_code = os.system(txt_convert_cmd)
+if exit_code != 0:
+    logging.error(f"Convert .bin to .txt failed with code {exit_code}.")
+    exit(exit_code)
+
 
 if(args.resize):
     print("Copying and resizing...")
@@ -102,9 +108,9 @@ if(args.resize):
     os.makedirs(args.source_path + "/images_2", exist_ok=True)
     os.makedirs(args.source_path + "/images_4", exist_ok=True)
     os.makedirs(args.source_path + "/images_8", exist_ok=True)
-    # Get the list of files in the source directory
+    # Get the list of files in the source directory 获取源目录中的文件列表
     files = os.listdir(args.source_path + "/images")
-    # Copy each file from the source directory to the destination directory
+    # Copy each file from the source directory to the destination directory 将每个文件从源目录复制到目标目录
     for file in files:
         source_file = os.path.join(args.source_path, "images", file)
 
@@ -129,4 +135,21 @@ if(args.resize):
             logging.error(f"12.5% resize failed with code {exit_code}. Exiting.")
             exit(exit_code)
 
-print("Done.")
+print("Sparse Reconstruction Done.")
+
+
+### Dense Reconstruction and Depth Map Generation
+## We will use the patch match stereo algorithm for dense reconstruction.
+dense_recon_cmd = colmap_command + " patch_match_stereo \
+    --workspace_path " + args.source_path + " \
+    --workspace_format COLMAP" + " \
+    --PatchMatchStereo.geom_consistency true"
+
+exit_code = os.system(dense_recon_cmd)
+if exit_code != 0:
+    logging.error(f"Dense reconstruction failed with code {exit_code}. ")
+    exit(exit_code)
+
+print("Depth map generation have been completed successfully.")
+
+
