@@ -4,7 +4,7 @@ This is the initial LoFTR [README](docs/README.md) file.
 
 As we all know, training LoFTR is not easy, I mean the official dont offer too much info for training our own custom datasets, so I give it a try.
 
-![](assets/loftr-github-demo.gif)
+![demo](assets/loftr-github-demo.gif)
 
 This repo finishs the following things:
 
@@ -274,7 +274,7 @@ cfg.TRAINER.N_SAMPLES_PER_SUBSET = 100
 cfg.DATASET.MGDPT_IMG_RESIZE = 640  # for training on 11GB mem GPUs
 ```
 
-# 5.Total Command
+# 5.Full command
 ```python
 # 1. first step
 python generate_train_data/colmap_convert.py -s <location> 
